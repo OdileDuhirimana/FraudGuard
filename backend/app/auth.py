@@ -11,7 +11,13 @@ import jwt
 from .database import get_db
 from . import models
 
-SECRET_KEY = os.environ.get("JWT_SECRET_KEY") or _secrets.token_hex(32)
+_jwt_secret = os.environ.get("JWT_SECRET_KEY")
+if not _jwt_secret:
+    _is_prod = os.environ.get("ENV", "development") == "production"
+    if _is_prod:
+        raise RuntimeError("JWT_SECRET_KEY env var must be set in production")
+    _jwt_secret = _secrets.token_hex(32)
+SECRET_KEY = _jwt_secret
 ALGORITHM = "HS256"
 ACCESS_TOKEN_EXPIRE_MINUTES = 60 * 8
 
