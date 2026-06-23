@@ -20,10 +20,7 @@ router = APIRouter()
 @router.post("/score", response_model=ScoreOut)
 def score_transaction(payload: TransactionIn, db: Session = Depends(get_db), user=Depends(get_current_user)):
     d = payload.dict()
-    # augment with velocity and dark web exposure
-    if d.get("user_id") or getattr(user, "id", None):
-        uid = d.get("user_id") or user.id
-        d["velocity_1min"] = count_user_tx_last_minutes(db, uid, 1)
+    d["velocity_1min"] = count_user_tx_last_minutes(db, user.id, 1)
     if d.get("card_hash"):
         d["darkweb_hit"] = is_exposed(d["card_hash"])
 
@@ -31,7 +28,7 @@ def score_transaction(payload: TransactionIn, db: Session = Depends(get_db), use
     s, decision, reason = risk_score(features)
 
     tx = models.Transaction(
-        user_id=payload.user_id or user.id,
+        user_id=user.id,
         amount=payload.amount,
         currency=payload.currency,
         merchant=payload.merchant,
@@ -58,8 +55,6 @@ def score_transaction(payload: TransactionIn, db: Session = Depends(get_db), use
 
 @router.post("/behavior")
 def track_behavior(event: BehaviorEventIn, db: Session = Depends(get_db), user=Depends(get_current_user)):
-    if event.user_id is not None and event.user_id != user.id and user.role != "admin":
-        raise HTTPException(status_code=403, detail="Cannot record behavior for another user")
     be = models.BehaviorEvent(user_id=user.id, event_type=event.event_type, data=encrypt_json(event.data))
     db.add(be)
     db.commit()
@@ -68,8 +63,6 @@ def track_behavior(event: BehaviorEventIn, db: Session = Depends(get_db), user=D
 
 @router.post("/device")
 def register_device(d: DeviceIn, db: Session = Depends(get_db), user=Depends(get_current_user)):
-    if d.user_id is not None and d.user_id != user.id and user.role != "admin":
-        raise HTTPException(status_code=403, detail="Cannot register device for another user")
     dev = models.Device(user_id=user.id, device_id=d.device_id, fingerprint=encrypt_json(d.fingerprint), compromised=False)
     db.add(dev)
     db.commit()
@@ -122,9 +115,11 @@ def fraud_graph(db: Session = Depends(get_db), user=Depends(require_role("admin"
 def otp_init(payload: OTPInitIn, db: Session = Depends(get_db), user=Depends(get_current_user)):
     tx = db.query(models.Transaction).filter(models.Transaction.id == payload.transaction_id).first()
     if not tx:
-        return {"error": "transaction_not_found"}
+        raise HTTPException(status_code=404, detail="Transaction not found")
+    if tx.user_id != user.id and user.role != "admin":
+        raise HTTPException(status_code=403, detail="Not authorized for this transaction")
     code = f"{secrets.randbelow(1_000_000):06d}"
-    challenge = models.OTPChallenge(transaction_id=tx.id, user_id=tx.user_id, code=code)
+    challenge = models.OTPChallenge(transaction_id=tx.id, user_id=user.id, code=code)
     db.add(challenge)
     db.commit()
     return {"status": "sent", "transaction_id": tx.id}
