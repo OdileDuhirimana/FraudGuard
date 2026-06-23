@@ -5,13 +5,14 @@ from .. import models
 from ..schemas import TransactionIn, ScoreOut, BehaviorEventIn, DeviceIn, FeedbackIn, OTPInitIn, OTPVerifyIn
 from ..ml.ensemble import ensemble_features
 from ..risk import risk_score
-from ..auth import get_current_user
+from fastapi import HTTPException
+from ..auth import get_current_user, require_role
 from ..services.analytics import count_user_tx_last_minutes
 from ..services.darkweb import is_exposed
 from ..security import encrypt_json
 from networkx.readwrite import json_graph
 import networkx as nx
-import random
+import secrets
 
 router = APIRouter()
 
@@ -57,7 +58,9 @@ def score_transaction(payload: TransactionIn, db: Session = Depends(get_db), use
 
 @router.post("/behavior")
 def track_behavior(event: BehaviorEventIn, db: Session = Depends(get_db), user=Depends(get_current_user)):
-    be = models.BehaviorEvent(user_id=event.user_id, event_type=event.event_type, data=encrypt_json(event.data))
+    if event.user_id is not None and event.user_id != user.id and user.role != "admin":
+        raise HTTPException(status_code=403, detail="Cannot record behavior for another user")
+    be = models.BehaviorEvent(user_id=user.id, event_type=event.event_type, data=encrypt_json(event.data))
     db.add(be)
     db.commit()
     return {"status": "ok"}
@@ -65,14 +68,16 @@ def track_behavior(event: BehaviorEventIn, db: Session = Depends(get_db), user=D
 
 @router.post("/device")
 def register_device(d: DeviceIn, db: Session = Depends(get_db), user=Depends(get_current_user)):
-    dev = models.Device(user_id=d.user_id, device_id=d.device_id, fingerprint=encrypt_json(d.fingerprint), compromised=False)
+    if d.user_id is not None and d.user_id != user.id and user.role != "admin":
+        raise HTTPException(status_code=403, detail="Cannot register device for another user")
+    dev = models.Device(user_id=user.id, device_id=d.device_id, fingerprint=encrypt_json(d.fingerprint), compromised=False)
     db.add(dev)
     db.commit()
     return {"status": "ok"}
 
 
 @router.get("/alerts")
-def alerts_feed(db: Session = Depends(get_db), user=Depends(get_current_user)):
+def alerts_feed(db: Session = Depends(get_db), user=Depends(require_role("admin", "analyst"))):
     alerts = db.query(models.Alert).order_by(models.Alert.created_at.desc()).limit(100).all()
     return alerts
 
@@ -87,7 +92,7 @@ def feedback_fb(fb: FeedbackIn, db: Session = Depends(get_db), user=Depends(get_
 
 
 @router.get("/graph")
-def fraud_graph(db: Session = Depends(get_db), user=Depends(get_current_user)):
+def fraud_graph(db: Session = Depends(get_db), user=Depends(require_role("admin"))):
     # Build a simple graph where nodes are users and devices; edges connect user<->device and user<->ip clusters
     G = nx.Graph()
     # Users nodes
@@ -118,12 +123,11 @@ def otp_init(payload: OTPInitIn, db: Session = Depends(get_db), user=Depends(get
     tx = db.query(models.Transaction).filter(models.Transaction.id == payload.transaction_id).first()
     if not tx:
         return {"error": "transaction_not_found"}
-    code = f"{random.randint(0, 999999):06d}"
+    code = f"{secrets.randbelow(1_000_000):06d}"
     challenge = models.OTPChallenge(transaction_id=tx.id, user_id=tx.user_id, code=code)
     db.add(challenge)
     db.commit()
-    # In real-world, send via SMS/Email/Push. Here we return masked info and code for demo/testing.
-    return {"status": "sent", "transaction_id": tx.id, "code": code}
+    return {"status": "sent", "transaction_id": tx.id}
 
 
 @router.post("/otp/verify")

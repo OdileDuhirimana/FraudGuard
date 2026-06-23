@@ -1,7 +1,9 @@
+import os
+import secrets as _secrets
 from datetime import datetime, timedelta
 from typing import Optional
 from fastapi import Depends, HTTPException, status
-from fastapi.security import OAuth2PasswordBearer, OAuth2PasswordRequestForm
+from fastapi.security import OAuth2PasswordBearer
 from sqlalchemy.orm import Session
 from passlib.context import CryptContext
 import jwt
@@ -9,7 +11,7 @@ import jwt
 from .database import get_db
 from . import models
 
-SECRET_KEY = "CHANGE_ME_SUPER_SECRET"  # replace via env in production
+SECRET_KEY = os.environ.get("JWT_SECRET_KEY") or _secrets.token_hex(32)
 ALGORITHM = "HS256"
 ACCESS_TOKEN_EXPIRE_MINUTES = 60 * 8
 
