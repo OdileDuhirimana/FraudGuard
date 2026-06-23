@@ -23,7 +23,6 @@ class Token(BaseModel):
 
 
 class TransactionIn(BaseModel):
-    user_id: Optional[int] = None
     amount: float
     currency: str = "USD"
     merchant: Optional[str] = None
@@ -46,13 +45,11 @@ class ScoreOut(BaseModel):
 
 
 class BehaviorEventIn(BaseModel):
-    user_id: int
     event_type: str
     data: Dict[str, Any]
 
 
 class DeviceIn(BaseModel):
-    user_id: int
     device_id: str
     fingerprint: Dict[str, Any]
 
