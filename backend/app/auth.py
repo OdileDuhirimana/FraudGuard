@@ -49,10 +49,10 @@ def get_current_user(db: Session = Depends(get_db), token: str = Depends(oauth2_
     )
     try:
         payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
-        email: str = payload.get("sub")
-        if email is None:
-            raise credentials_exception
-    except Exception:
+    except jwt.InvalidTokenError:
+        raise credentials_exception
+    email: str = payload.get("sub")
+    if email is None:
         raise credentials_exception
     user = db.query(models.User).filter(models.User.email == email).first()
     if user is None:
