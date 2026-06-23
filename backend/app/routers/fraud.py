@@ -17,10 +17,17 @@ import secrets
 router = APIRouter()
 
 
+def _require_user_id(user) -> int:
+    if user is None or user.id is None:
+        raise HTTPException(status_code=401, detail="Could not resolve authenticated user")
+    return user.id
+
+
 @router.post("/score", response_model=ScoreOut)
 def score_transaction(payload: TransactionIn, db: Session = Depends(get_db), user=Depends(get_current_user)):
+    uid = _require_user_id(user)
     d = payload.dict()
-    d["velocity_1min"] = count_user_tx_last_minutes(db, user.id, 1)
+    d["velocity_1min"] = count_user_tx_last_minutes(db, uid, 1)
     if d.get("card_hash"):
         d["darkweb_hit"] = is_exposed(d["card_hash"])
 
@@ -28,7 +35,7 @@ def score_transaction(payload: TransactionIn, db: Session = Depends(get_db), use
     s, decision, reason = risk_score(features)
 
     tx = models.Transaction(
-        user_id=user.id,
+        user_id=uid,
         amount=payload.amount,
         currency=payload.currency,
         merchant=payload.merchant,
@@ -55,7 +62,7 @@ def score_transaction(payload: TransactionIn, db: Session = Depends(get_db), use
 
 @router.post("/behavior")
 def track_behavior(event: BehaviorEventIn, db: Session = Depends(get_db), user=Depends(get_current_user)):
-    be = models.BehaviorEvent(user_id=user.id, event_type=event.event_type, data=encrypt_json(event.data))
+    be = models.BehaviorEvent(user_id=_require_user_id(user), event_type=event.event_type, data=encrypt_json(event.data))
     db.add(be)
     db.commit()
     return {"status": "ok"}
@@ -63,7 +70,7 @@ def track_behavior(event: BehaviorEventIn, db: Session = Depends(get_db), user=D
 
 @router.post("/device")
 def register_device(d: DeviceIn, db: Session = Depends(get_db), user=Depends(get_current_user)):
-    dev = models.Device(user_id=user.id, device_id=d.device_id, fingerprint=encrypt_json(d.fingerprint), compromised=False)
+    dev = models.Device(user_id=_require_user_id(user), device_id=d.device_id, fingerprint=encrypt_json(d.fingerprint), compromised=False)
     db.add(dev)
     db.commit()
     return {"status": "ok"}

@@ -23,6 +23,7 @@ class Token(BaseModel):
 
 
 class TransactionIn(BaseModel):
+    model_config = ConfigDict(extra="ignore")
     amount: float
     currency: str = "USD"
     merchant: Optional[str] = None
@@ -45,11 +46,13 @@ class ScoreOut(BaseModel):
 
 
 class BehaviorEventIn(BaseModel):
+    model_config = ConfigDict(extra="ignore")
     event_type: str
     data: Dict[str, Any]
 
 
 class DeviceIn(BaseModel):
+    model_config = ConfigDict(extra="ignore")
     device_id: str
     fingerprint: Dict[str, Any]
 
