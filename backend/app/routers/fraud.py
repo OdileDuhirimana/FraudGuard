@@ -55,6 +55,8 @@ def score_transaction(payload: TransactionIn, db: Session = Depends(get_db), use
 
 @router.post("/behavior")
 def track_behavior(event: BehaviorEventIn, db: Session = Depends(get_db), user=Depends(get_current_user)):
+    if event.user_id is not None and event.user_id != user.id:
+        raise HTTPException(status_code=403, detail="user_id must match authenticated user")
     be = models.BehaviorEvent(user_id=user.id, event_type=event.event_type, data=encrypt_json(event.data))
     db.add(be)
     db.commit()
@@ -63,6 +65,8 @@ def track_behavior(event: BehaviorEventIn, db: Session = Depends(get_db), user=D
 
 @router.post("/device")
 def register_device(d: DeviceIn, db: Session = Depends(get_db), user=Depends(get_current_user)):
+    if d.user_id is not None and d.user_id != user.id:
+        raise HTTPException(status_code=403, detail="user_id must match authenticated user")
     dev = models.Device(user_id=user.id, device_id=d.device_id, fingerprint=encrypt_json(d.fingerprint), compromised=False)
     db.add(dev)
     db.commit()
