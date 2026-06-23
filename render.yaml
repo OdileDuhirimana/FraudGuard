@@ -9,7 +9,5 @@ services:
     envVars:
       - key: ENV
         value: production
-      - key: CORS_ALLOWED_ORIGINS
-        sync: false
       - key: JWT_SECRET_KEY
         generateValue: true
