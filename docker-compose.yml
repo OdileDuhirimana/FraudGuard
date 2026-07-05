@@ -11,7 +11,23 @@ services:
       - DATABASE_URL=${DATABASE_URL:-}
       - FG_AES_KEY=${FG_AES_KEY:-}
       - FG_ML_ARTIFACTS=${FG_ML_ARTIFACTS:-}
+      # Optional: point at the `redis` service below for shared,
+      # multi-instance rate limiting (docs/adr/0004-rate-limiting.md).
+      # Leave unset (default) to use the original in-memory limiter.
+      - REDIS_URL=${REDIS_URL:-}
     ports:
       - "8011:8011"
     restart: unless-stopped
     command: ["uvicorn", "backend.app.main:app", "--host", "0.0.0.0", "--port", "8011"]
+
+  # Optional — only used if `backend`'s REDIS_URL is pointed at it
+  # (e.g. REDIS_URL=redis://redis:6379/0). Not started by default unless
+  # this compose file is run with `--profile redis` or the service is
+  # referenced explicitly, keeping the default `docker compose up` footprint
+  # unchanged for anyone not opting into Redis-backed rate limiting.
+  redis:
+    image: redis:7-alpine
+    profiles: ["redis"]
+    ports:
+      - "6379:6379"
+    restart: unless-stopped
