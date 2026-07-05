@@ -15,6 +15,7 @@ services:
       # multi-instance rate limiting (docs/adr/0004-rate-limiting.md).
       # Leave unset (default) to use the original in-memory limiter.
       - REDIS_URL=${REDIS_URL:-}
+      - SENTRY_DSN=${SENTRY_DSN:-}
     ports:
       - "8011:8011"
     restart: unless-stopped

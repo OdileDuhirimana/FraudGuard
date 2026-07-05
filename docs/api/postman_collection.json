@@ -1,0 +1,228 @@
+{
+  "info": {
+    "name": "FraudGuard API",
+    "description": "Hand-curated Postman collection for the FraudGuard fraud-scoring API, distinct from the auto-generated FastAPI /docs Swagger UI (API-06 finding). Covers the full auth -> score -> OTP step-up flow plus admin/investigator endpoints. See docs/api/openapi.json for the machine-generated schema this collection is kept consistent with (both are regenerated/reviewed together whenever a route changes).",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "variable": [
+    { "key": "base_url", "value": "http://127.0.0.1:8000", "type": "string" },
+    { "key": "access_token", "value": "", "type": "string" },
+    { "key": "transaction_id", "value": "", "type": "string" },
+    { "key": "otp_code", "value": "", "type": "string" }
+  ],
+  "item": [
+    {
+      "name": "Auth",
+      "item": [
+        {
+          "name": "Register",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "url": { "raw": "{{base_url}}/v1/auth/register", "host": ["{{base_url}}"], "path": ["v1", "auth", "register"] },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"demo@example.com\",\n  \"password\": \"SecurePass123!\"\n}"
+            }
+          }
+        },
+        {
+          "name": "Login",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "const body = pm.response.json();",
+                  "if (body.access_token) { pm.collectionVariables.set('access_token', body.access_token); }"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "url": { "raw": "{{base_url}}/v1/auth/login", "host": ["{{base_url}}"], "path": ["v1", "auth", "login"] },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"demo@example.com\",\n  \"password\": \"SecurePass123!\"\n}"
+            }
+          }
+        },
+        {
+          "name": "Logout",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Authorization", "value": "Bearer {{access_token}}" }],
+            "url": { "raw": "{{base_url}}/v1/auth/logout", "host": ["{{base_url}}"], "path": ["v1", "auth", "logout"] }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Fraud",
+      "item": [
+        {
+          "name": "Score a transaction",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "const body = pm.response.json();",
+                  "if (body.transaction_id) { pm.collectionVariables.set('transaction_id', String(body.transaction_id)); }"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "Authorization", "value": "Bearer {{access_token}}" }
+            ],
+            "url": { "raw": "{{base_url}}/v1/fraud/score", "host": ["{{base_url}}"], "path": ["v1", "fraud", "score"] },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"amount\": 1850.0,\n  \"mcc\": \"7995\",\n  \"ip\": \"203.0.113.9\",\n  \"gps_lat\": 1.0,\n  \"gps_lon\": 1.0,\n  \"timezone_mismatch\": true\n}"
+            }
+          }
+        },
+        {
+          "name": "OTP init (step-up challenge)",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "Authorization", "value": "Bearer {{access_token}}" }
+            ],
+            "url": { "raw": "{{base_url}}/v1/fraud/otp/init", "host": ["{{base_url}}"], "path": ["v1", "fraud", "otp", "init"] },
+            "body": { "mode": "raw", "raw": "{\n  \"transaction_id\": {{transaction_id}}\n}" }
+          }
+        },
+        {
+          "name": "OTP verify",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "Authorization", "value": "Bearer {{access_token}}" }
+            ],
+            "url": { "raw": "{{base_url}}/v1/fraud/otp/verify", "host": ["{{base_url}}"], "path": ["v1", "fraud", "otp", "verify"] },
+            "body": { "mode": "raw", "raw": "{\n  \"transaction_id\": {{transaction_id}},\n  \"code\": \"{{otp_code}}\"\n}" }
+          }
+        },
+        {
+          "name": "Submit feedback",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "Authorization", "value": "Bearer {{access_token}}" }
+            ],
+            "url": { "raw": "{{base_url}}/v1/fraud/feedback", "host": ["{{base_url}}"], "path": ["v1", "fraud", "feedback"] },
+            "body": { "mode": "raw", "raw": "{\n  \"transaction_id\": {{transaction_id}},\n  \"label\": true\n}" }
+          }
+        },
+        {
+          "name": "Alerts feed (paginated)",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Bearer {{access_token}}" }],
+            "url": {
+              "raw": "{{base_url}}/v1/fraud/alerts?page=1&page_size=25&sort=-created_at",
+              "host": ["{{base_url}}"],
+              "path": ["v1", "fraud", "alerts"],
+              "query": [
+                { "key": "page", "value": "1" },
+                { "key": "page_size", "value": "25" },
+                { "key": "sort", "value": "-created_at" }
+              ]
+            }
+          }
+        },
+        {
+          "name": "Graph (paginated, synchronous)",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Bearer {{access_token}}" }],
+            "url": {
+              "raw": "{{base_url}}/v1/fraud/graph?page=1&page_size=25",
+              "host": ["{{base_url}}"],
+              "path": ["v1", "fraud", "graph"],
+              "query": [{ "key": "page", "value": "1" }, { "key": "page_size", "value": "25" }]
+            }
+          }
+        },
+        {
+          "name": "Graph job: create (async, full scan)",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Authorization", "value": "Bearer {{access_token}}" }],
+            "url": { "raw": "{{base_url}}/v1/fraud/graph/jobs", "host": ["{{base_url}}"], "path": ["v1", "fraud", "graph", "jobs"] }
+          }
+        },
+        {
+          "name": "Graph job: poll status",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Bearer {{access_token}}" }],
+            "url": { "raw": "{{base_url}}/v1/fraud/graph/jobs/1", "host": ["{{base_url}}"], "path": ["v1", "fraud", "graph", "jobs", "1"] }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Admin",
+      "item": [
+        {
+          "name": "List users (paginated)",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Bearer {{access_token}}" }],
+            "url": { "raw": "{{base_url}}/v1/admin/users?page=1&page_size=25", "host": ["{{base_url}}"], "path": ["v1", "admin", "users"] }
+          }
+        },
+        {
+          "name": "List audit log (paginated)",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Bearer {{access_token}}" }],
+            "url": { "raw": "{{base_url}}/v1/admin/audit?page=1&page_size=25", "host": ["{{base_url}}"], "path": ["v1", "admin", "audit"] }
+          }
+        },
+        {
+          "name": "Change a user's role",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "Authorization", "value": "Bearer {{access_token}}" }
+            ],
+            "url": { "raw": "{{base_url}}/v1/admin/role", "host": ["{{base_url}}"], "path": ["v1", "admin", "role"] },
+            "body": { "mode": "raw", "raw": "{\n  \"user_id\": 2,\n  \"role\": \"investigator\"\n}" }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Meta",
+      "item": [
+        {
+          "name": "Health check",
+          "request": {
+            "method": "GET",
+            "url": { "raw": "{{base_url}}/health", "host": ["{{base_url}}"], "path": ["health"] }
+          }
+        },
+        {
+          "name": "Prometheus metrics",
+          "request": {
+            "method": "GET",
+            "url": { "raw": "{{base_url}}/metrics", "host": ["{{base_url}}"], "path": ["metrics"] }
+          }
+        }
+      ]
+    }
+  ]
+}

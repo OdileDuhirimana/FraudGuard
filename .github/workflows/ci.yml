@@ -1,0 +1,101 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  test:
+    name: Lint, migrate, and test
+    runs-on: ubuntu-latest
+
+    # Real Redis service so tests/test_rate_limit_redis.py exercises
+    # RedisRateLimitBackend against an actual server in CI, not only when a
+    # developer happens to have REDIS_URL set locally (docs/adr/0004).
+    services:
+      redis:
+        image: redis:7-alpine
+        ports:
+          - 6379:6379
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 5s
+          --health-timeout 3s
+          --health-retries 5
+
+    defaults:
+      run:
+        working-directory: backend
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: "pip"
+          cache-dependency-path: backend/requirements.txt
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+          pip install ruff
+
+      - name: Lint (ruff)
+        run: ruff check app tests
+
+      - name: Verify Alembic migrations apply cleanly
+        env:
+          ENV: development
+          CORS_ALLOWED_ORIGINS: http://localhost:3000
+          JWT_SECRET_KEY: ci-test-secret-not-for-production
+        run: |
+          alembic upgrade head
+          alembic downgrade base
+          alembic upgrade head
+
+      - name: Run tests with coverage
+        env:
+          ENV: development
+          CORS_ALLOWED_ORIGINS: http://localhost:3000
+          JWT_SECRET_KEY: ci-test-secret-not-for-production
+          # Points RedisRateLimitBackend tests at the `redis` service above
+          # instead of skipping them (see tests/test_rate_limit_redis.py).
+          # This also includes tests/test_openapi_contract.py, which fails
+          # the build if the live OpenAPI schema drifts from the checked-in
+          # docs/api/openapi.json snapshot (contract/schema-diff coverage).
+          REDIS_URL: redis://localhost:6379/0
+        run: pytest --cov=app --cov-report=xml --cov-report=term-missing --cov-fail-under=60
+
+      - name: Upload coverage report
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: coverage-report
+          path: backend/coverage.xml
+
+  deploy:
+    name: Deploy to Render (on merge to main)
+    needs: test
+    runs-on: ubuntu-latest
+    # Only deploy on a real push to main (not on pull_request builds), and
+    # only after the `test` job above has passed — a failing test or a
+    # PR build can never trigger a deploy.
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+
+    steps:
+      - name: Trigger Render deploy hook
+        env:
+          RENDER_DEPLOY_HOOK_URL: ${{ secrets.RENDER_DEPLOY_HOOK_URL }}
+        run: |
+          if [ -z "$RENDER_DEPLOY_HOOK_URL" ]; then
+            echo "RENDER_DEPLOY_HOOK_URL secret is not configured for this repository." >&2
+            echo "This step is intentionally a no-op until a real Render service/deploy hook is provisioned — see render.yaml and README 'Deployment' section." >&2
+            exit 0
+          fi
+          curl --fail --silent --show-error -X POST "$RENDER_DEPLOY_HOOK_URL"
