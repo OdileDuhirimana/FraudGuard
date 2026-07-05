@@ -11,3 +11,16 @@ services:
         value: production
       - key: JWT_SECRET_KEY
         generateValue: true
+      - key: FG_AES_KEY
+        sync: false
+        # Must be set manually to a base64-encoded 32-byte value before
+        # deploy — the app refuses to start in production without it
+        # (fails closed rather than silently storing plaintext).
+      - key: CORS_ALLOWED_ORIGINS
+        sync: false
+        # Must be set manually to an explicit, comma-separated allow-list
+        # of real frontend origins — the app refuses to start in
+        # production with this unset or containing "*".
+      - key: DATABASE_URL
+        sync: false
+        # Postgres connection string. Required in production.

@@ -5,6 +5,10 @@ services:
       context: .
       dockerfile: backend/Dockerfile
     environment:
+      - ENV=${ENV:-development}
+      - CORS_ALLOWED_ORIGINS=${CORS_ALLOWED_ORIGINS:-http://localhost:3000}
+      - JWT_SECRET_KEY=${JWT_SECRET_KEY:-}
+      - DATABASE_URL=${DATABASE_URL:-}
       - FG_AES_KEY=${FG_AES_KEY:-}
       - FG_ML_ARTIFACTS=${FG_ML_ARTIFACTS:-}
     ports:
